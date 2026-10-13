@@ -1,0 +1,134 @@
+name: Opportunity 100 - 25 Aktien Test
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  pilot:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    env:
+      EODHD_API_KEY: ${{ secrets.EODHD_API_KEY }}
+    steps:
+      - name: Kursdaten fuer 25 Aktien und SPY pruefen
+        shell: bash
+        run: |
+          python3 - <<'PY'
+          import datetime as dt
+          import json
+          import math
+          import os
+          import pathlib
+          import time
+          import urllib.error
+          import urllib.parse
+          import urllib.request
+
+          TOKEN = os.environ.get('EODHD_API_KEY', '').strip()
+          if not TOKEN:
+              raise SystemExit('EODHD_API_KEY fehlt. Bitte Repository Secret pruefen.')
+          symbols = ['AAPL', 'MSFT', 'NVDA', 'AMZN', 'PLTR', 'GOOG', 'META', 'AVGO', 'TSLA', 'AMD', 'CRM', 'ADBE', 'ORCL', 'INTC', 'CSCO', 'QCOM', 'TXN', 'AMAT', 'LRCX', 'MU', 'NFLX', 'COST', 'WMT', 'JPM', 'XOM']
+          benchmark = 'SPY'
+          results = []
+          errors = []
+          cutoff = (dt.date.today() - dt.timedelta(days=550)).isoformat()
+
+          def download(ticker):
+              params = urllib.parse.urlencode({'from': cutoff, 'fmt': 'json', 'order': 'a'})
+              url = 'https://eodhd.com/api/eod/' + urllib.parse.quote(ticker + '.US') + '?' + params
+              req = urllib.request.Request(url, headers={'Authorization': 'Bearer ' + TOKEN, 'User-Agent': 'Opportunity100-25-test/1.0'})
+              with urllib.request.urlopen(req, timeout=40) as response:
+                  payload = json.load(response)
+              if not isinstance(payload, list):
+                  raise ValueError('Keine Kursliste empfangen (API/Tarif pruefen)')
+              bars = []
+              for r in payload:
+                  try:
+                      date = str(r['date'])
+                      close = float(r['adjusted_close'] if r.get('adjusted_close') is not None else r['close'])
+                      raw_close = float(r['close'])
+                      if not (math.isfinite(close) and close > 0 and math.isfinite(raw_close) and raw_close > 0):
+                          continue
+                      bars.append((date, close, raw_close))
+                  except (KeyError, TypeError, ValueError):
+                      continue
+              bars.sort(key=lambda x: x[0])
+              unique = {x[0]: x for x in bars}
+              return list(sorted(unique.values()))
+
+          def calc(ticker, bars, bench):
+              if len(bars) < 201:
+                  raise ValueError('Zu wenig Kurshistorie: ' + str(len(bars)) + ' statt mindestens 201 Handelstage')
+              dates = [r[0] for r in bars]
+              adjusted = [r[1] for r in bars]
+              today = dates[-1]
+              benchmark_by_day = {r[0]: r[1] for r in bench}
+              def rel_strength(n):
+                  if len(bars) <= n:
+                      return None
+                  prev = dates[-n-1]
+                  if prev not in benchmark_by_day or today not in benchmark_by_day:
+                      return None
+                  base = benchmark_by_day[prev]
+                  end = benchmark_by_day[today]
+                  if base <= 0 or end <= 0:
+                      return None
+                  return round(100 * ((adjusted[-1] / adjusted[-n-1]) / (end / base) - 1), 2)
+              sma50 = sum(adjusted[-50:]) / 50
+              sma200 = sum(adjusted[-200:]) / 200
+              return {
+                  'ticker': ticker, 'data_date': today,
+                  'last_unadjusted_close_usd': round(bars[-1][2], 4),
+                  'adjusted_close_usd': round(adjusted[-1], 4),
+                  'sma50_distance_pct_adjusted': round(100 * (adjusted[-1] / sma50 - 1), 2),
+                  'sma200_distance_pct_adjusted': round(100 * (adjusted[-1] / sma200 - 1), 2),
+                  'relative_return_vs_spy_63_sessions_pct': rel_strength(63),
+                  'relative_return_vs_spy_126_sessions_pct': rel_strength(126),
+                  'history_sessions': len(bars)
+              }
+
+          try:
+              spy = download(benchmark)
+              if len(spy) < 201:
+                  raise ValueError('SPY-Benchmark-Historie unvollstaendig')
+          except Exception as exc:
+              raise SystemExit('Benchmark SPY nicht abrufbar: ' + str(exc)) from None
+          print('SPY erfolgreich geladen:', len(spy), 'Handelstage; Stichtag:', spy[-1][0])
+          for ticker in symbols:
+              try:
+                  bars = download(ticker)
+                  value = calc(ticker, bars, spy)
+                  results.append(value)
+                  print('OK', ticker, value['data_date'], 'Kurs', value['last_unadjusted_close_usd'])
+              except Exception as exc:
+                  errors.append({'ticker': ticker, 'error': str(exc)})
+                  print('FEHLER', ticker, str(exc))
+              time.sleep(0.5)
+          report = {
+              'purpose': '25 stock capability test; no website or strategy scores changed',
+              'created_utc': dt.datetime.now(dt.timezone.utc).isoformat(),
+              'data_source': 'EODHD', 'benchmark': 'SPY.US',
+              'method': 'SMA on adjusted close, relative performance vs SPY over trading sessions',
+              'results': results, 'errors': errors,
+              'ticker_count_requested': len(symbols),
+              'ticker_count_successful': len(results),
+              'benchmark_history_sessions': len(spy),
+              'benchmark_last_date': spy[-1][0],
+              'benchmark_last_unadjusted_close_usd': round(spy[-1][2], 4)
+          }
+          pathlib.Path('opportunity100_25_report.json').write_text(json.dumps(report, ensure_ascii=False, indent=2), encoding='utf-8')
+          print('25er-Test:', len(results), 'von', len(symbols), 'Aktien erfolgreich')
+          if errors or len(results) != len(symbols):
+              raise SystemExit('25er-Test unvollstaendig. Fehlende Aktien vor Ausbau pruefen.')
+          PY
+      - name: Pruefbericht speichern
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: opportunity100-25-report
+          path: opportunity100_25_report.json
+          if-no-files-found: warn
+          retention-days: 30
