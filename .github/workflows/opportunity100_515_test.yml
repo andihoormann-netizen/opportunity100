@@ -1,0 +1,136 @@
+name: Opportunity 100 - 515 Aktien Gesamtpruefung
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  pilot:
+    runs-on: ubuntu-latest
+    timeout-minutes: 55
+    env:
+      EODHD_API_KEY: ${{ secrets.EODHD_API_KEY }}
+    steps:
+      - name: Kursdaten fuer 515 Aktien und SPY pruefen
+        shell: bash
+        run: |
+          python3 - <<'PY'
+          import datetime as dt
+          import json
+          import math
+          import os
+          import pathlib
+          import time
+          import urllib.error
+          import urllib.parse
+          import urllib.request
+
+          TOKEN = os.environ.get('EODHD_API_KEY', '').strip()
+          if not TOKEN:
+              raise SystemExit('EODHD_API_KEY fehlt. Bitte Repository Secret pruefen.')
+          symbols = ['PLTR', 'PTC', 'SMCI', 'VEEV', 'CRWD', 'LITE', 'MSFT', 'SHOP', 'PANW', 'NOW', 'MRVL', 'FTNT', 'BE', 'ANET', 'SNPS', 'AMGN', 'AMD', 'NVDA', 'DDOG', 'APH', 'MU', 'MA', 'PWR', 'V', 'HUM', 'P', 'HPE', 'IT', 'CRM', 'TWLO', 'GDDY', 'VRSN', 'PM', 'CTAS', 'FDS', 'MRNA', 'MSTR', 'MPC', 'ACN', 'VLO', 'ILMN', 'ZBRA', 'NTAP', 'PSX', 'RVTY', 'DELL', 'APA', 'CRL', 'SWKS', 'WDAY', 'A', 'IQV', 'TMO', 'EL', 'BDX', 'KEYS', 'MTD', 'MRK', 'RMD', 'WAT', 'MCK', 'NDSN', 'FFIV', 'ABNB', 'IFF', 'ABBV', 'WSM', 'TRI', 'DXCM', 'EXPD', 'DHR', 'META', 'VTRS', 'BIIB', 'MPWR', 'MET', 'VRTX', 'AAPL', 'IEX', 'AMZN', 'COR', 'ADI', 'NBIS', 'LLY', 'HOOD', 'LRCX', 'ALAB', 'CDNS', 'ULTA', 'EMR', 'PYPL', 'HCA', 'CME', 'ICE', 'LH', 'CBOE', 'CPAY', 'ADP', 'FAST', 'TRV', 'AME', 'ETN', 'KDP', 'ELV', 'CNC', 'NEM', 'FCX', 'HPQ', 'COP', 'HAS', 'TER', 'XOM', 'PFE', 'CVX', 'CEG', 'GILD', 'TGT', 'COIN', 'SOLV', 'DIS', 'DGX', 'DVN', 'ADSK', 'GRMN', 'TEL', 'OXY', 'JCI', 'WAB', 'SJM', 'AMT', 'BAX', 'NUE', 'BBY', 'GPN', 'EOG', 'BLK', 'NWSA', 'KO', 'IVZ', 'VLTO', 'DASH', 'ASML', 'EME', 'TRGP', 'WST', 'COHR', 'TECH', 'INTC', 'HLT', 'MELI', 'CSCO', 'TT', 'GOOG', 'INCY', 'XYZ', 'EBAY', 'URI', 'CB', 'QCOM', 'TXN', 'SNDK', 'IBKR', 'CI', 'PGR', 'FLEX', 'STX', 'ARM', 'UNH', 'AMAT', 'UHS', 'REGN', 'ALLE', 'J', 'GM', 'MDT', 'MSI', 'NDAQ', 'BRK.B', 'EXPE', 'CAH', 'MAR', 'CIEN', 'RL', 'HST', 'WRB', 'RSG', 'GEV', 'AIZ', 'DAL', 'PAYX', 'DLTR', 'MNST', 'KLAC', 'DVA', 'SPCX', 'TRMB', 'TSCO', 'ORCL', 'EQT', 'DE', 'ADBE', 'INTU', 'KR', 'ISRG', 'ECL', 'GPC', 'DG', 'SWK', 'PG', 'AES', 'VST', 'STLD', 'KMI', 'MO', 'FANG', 'JPM', 'CCL', 'GNRC', 'FIX', 'CDW', 'STT', 'OKE', 'BEN', 'PRU', 'RCL', 'ARES', 'WMB', 'EG', 'ADM', 'AIG', 'WELL', 'PFG', 'IRM', 'TROW', 'LYV', 'EW', 'MSCI', 'AJG', 'GEN', 'GLW', 'RDDT', 'AXON', 'WDC', 'LDOS', 'BR', 'TYL', 'COST', 'JNJ', 'MDLZ', 'ROST', 'IR', 'ZTS', 'HUBB', 'EQIX', 'WMT', 'TSLA', 'AMP', 'PPL', 'BNY', 'GWW', 'PNW', 'ALL', 'TPL', 'DOC', 'AKAM', 'CTSH', 'FOXA', 'ABT', 'AVY', 'CSGP', 'PKG', 'ECHO', 'PH', 'CHD', 'ROP', 'CCI', 'APO', 'AMCR', 'TKO', 'AWK', 'COF', 'CCEP', 'SBAC', 'CVNA', 'HSIC', 'NSC', 'UNP', 'SW', 'UBER', 'PDD', 'BSX', 'CSX', 'NFLX', 'RJF', 'JBL', 'BX', 'AVGO', 'ROK', 'KKR', 'MCO', 'EXR', 'SPGI', 'ACGL', 'LIN', 'C', 'ESS', 'GL', 'PLD', 'NTRS', 'L', 'BKNG', 'BRO', 'ERIE', 'CINF', 'TDG', 'VTR', 'GD', 'RKLB', 'BA', 'VICI', 'RF', 'GE', 'CPT', 'CMG', 'UDR', 'ON', 'O', 'XYL', 'SYK', 'PODD', 'HWM', 'ALNY', 'FSLR', 'VRT', 'NCLH', 'LVS', 'LULU', 'WYNN', 'DECK', 'AON', 'ROL', 'APP', 'MGM', 'FICO', 'SLB', 'DRI', 'DLR', 'CPRT', 'JKHY', 'STE', 'ORLY', 'BKR', 'MRSH', 'ARE', 'AZO', 'RTX', 'ZBH', 'CBRE', 'FE', 'OMC', 'HII', 'TJX', 'USB', 'VRSK', 'SPG', 'IDXX', 'BAC', 'REG', 'CFG', 'PEG', 'YUM', 'INVH', 'EXC', 'KIM', 'FISV', 'F', 'UAL', 'WM', 'FRT', 'TTWO', 'LUV', 'AXP', 'MCD', 'HBAN', 'TPR', 'EFX', 'LHX', 'CVS', 'CARR', 'CMI', 'COO', 'CASY', 'APTV', 'T', 'LYB', 'EXE', 'MMM', 'BF.B', 'GEHC', 'BMY', 'WTW', 'DPZ', 'SYF', 'VZ', 'CRWV', 'LMT', 'DD', 'TDY', 'ITW', 'SHW', 'SKYD', 'WFC', 'ED', 'BALL', 'AOS', 'CL', 'SCHW', 'FERG', 'DOW', 'EVRG', 'SYY', 'KVUE', 'APD', 'HON', 'HSY', 'AFL', 'FDX', 'LEN', 'TSN', 'HAL', 'DUK', 'CF', 'XEL', 'HIG', 'FTV', 'PEP', 'PPG', 'STZ', 'NVR', 'AEP', 'PSA', 'DHI', 'PHM', 'AEE', 'MAS', 'ATO', 'SNA', 'OTIS', 'WEC', 'MTB', 'MCHP', 'LOW', 'SO', 'ETR', 'Q', 'KHC', 'TFC', 'KMB', 'FITB', 'CLX', 'NOC', 'BXP', 'ES', 'VMRK', 'DOV', 'GIS', 'NEE', 'BG', 'CNP', 'D', 'IP', 'CMCSA', 'PNC', 'PCAR', 'NI', 'CMS', 'MAA', 'HD', 'SRE', 'KEY', 'LNT', 'MS', 'CAT', 'GS', 'UPS', 'SBUX', 'DTE', 'MOS', 'MLM', 'VMC', 'MKC', 'TXT', 'WY', 'FIS', 'NXPI', 'JBHT', 'ALB', 'NKE', 'CRH', 'TMUS', 'ALGN', 'IBM', 'FER', 'CHTR', 'HRL', 'ODFL', 'FDXF', 'NRG', 'PCG', 'HONA', 'EIX', 'CHRW', 'PNR', 'LII', 'VYLR']
+          benchmark = 'SPY'
+          results = []
+          errors = []
+          cutoff = (dt.date.today() - dt.timedelta(days=550)).isoformat()
+
+          def download(ticker):
+              params = urllib.parse.urlencode({'from': cutoff, 'fmt': 'json', 'order': 'a'})
+              url = 'https://eodhd.com/api/eod/' + urllib.parse.quote(ticker + '.US') + '?' + params
+              req = urllib.request.Request(url, headers={'Authorization': 'Bearer ' + TOKEN, 'User-Agent': 'Opportunity100-515-test/1.0'})
+              with urllib.request.urlopen(req, timeout=40) as response:
+                  payload = json.load(response)
+              if not isinstance(payload, list):
+                  raise ValueError('Keine Kursliste empfangen (API/Tarif pruefen)')
+              bars = []
+              for r in payload:
+                  try:
+                      date = str(r['date'])
+                      close = float(r['adjusted_close'] if r.get('adjusted_close') is not None else r['close'])
+                      raw_close = float(r['close'])
+                      if not (math.isfinite(close) and close > 0 and math.isfinite(raw_close) and raw_close > 0):
+                          continue
+                      bars.append((date, close, raw_close))
+                  except (KeyError, TypeError, ValueError):
+                      continue
+              bars.sort(key=lambda x: x[0])
+              unique = {x[0]: x for x in bars}
+              return list(sorted(unique.values()))
+
+          def calc(ticker, bars, bench):
+              if len(bars) < 201:
+                  raise ValueError('Zu wenig Kurshistorie: ' + str(len(bars)) + ' statt mindestens 201 Handelstage')
+              dates = [r[0] for r in bars]
+              adjusted = [r[1] for r in bars]
+              today = dates[-1]
+              benchmark_by_day = {r[0]: r[1] for r in bench}
+              def rel_strength(n):
+                  if len(bars) <= n:
+                      return None
+                  prev = dates[-n-1]
+                  if prev not in benchmark_by_day or today not in benchmark_by_day:
+                      return None
+                  base = benchmark_by_day[prev]
+                  end = benchmark_by_day[today]
+                  if base <= 0 or end <= 0:
+                      return None
+                  return round(100 * ((adjusted[-1] / adjusted[-n-1]) / (end / base) - 1), 2)
+              sma50 = sum(adjusted[-50:]) / 50
+              sma200 = sum(adjusted[-200:]) / 200
+              return {
+                  'ticker': ticker, 'data_date': today,
+                  'last_unadjusted_close_usd': round(bars[-1][2], 4),
+                  'adjusted_close_usd': round(adjusted[-1], 4),
+                  'sma50_distance_pct_adjusted': round(100 * (adjusted[-1] / sma50 - 1), 2),
+                  'sma200_distance_pct_adjusted': round(100 * (adjusted[-1] / sma200 - 1), 2),
+                  'relative_return_vs_spy_63_sessions_pct': rel_strength(63),
+                  'relative_return_vs_spy_126_sessions_pct': rel_strength(126),
+                  'history_sessions': len(bars)
+              }
+
+          try:
+              spy = download(benchmark)
+              if len(spy) < 201:
+                  raise ValueError('SPY-Benchmark-Historie unvollstaendig')
+          except Exception as exc:
+              raise SystemExit('Benchmark SPY nicht abrufbar: ' + str(exc)) from None
+          print('SPY erfolgreich geladen:', len(spy), 'Handelstage; Stichtag:', spy[-1][0])
+          for ticker in symbols:
+              try:
+                  bars = download(ticker)
+                  value = calc(ticker, bars, spy)
+                  results.append(value)
+                  print('OK', ticker, value['data_date'], 'Kurs', value['last_unadjusted_close_usd'])
+              except Exception as exc:
+                  errors.append({'ticker': ticker, 'error': str(exc)})
+                  print('FEHLER', ticker, str(exc))
+              time.sleep(0.6)
+          report = {
+              'purpose': '515 stock coverage test; no website or strategy scores changed',
+              'created_utc': dt.datetime.now(dt.timezone.utc).isoformat(),
+              'data_source': 'EODHD', 'benchmark': 'SPY.US',
+              'method': 'SMA on adjusted close, relative performance vs SPY over trading sessions',
+              'results': results, 'errors': errors,
+              'ticker_count_requested': len(symbols),
+              'ticker_count_failed': len(errors),
+              'expected_source': 'Opportunity 100 index.html, snapshot 2026-10-09',
+              'ticker_count_successful': len(results),
+              'benchmark_history_sessions': len(spy),
+              'benchmark_last_date': spy[-1][0],
+              'benchmark_last_unadjusted_close_usd': round(spy[-1][2], 4)
+          }
+          pathlib.Path('opportunity100_515_report.json').write_text(json.dumps(report, ensure_ascii=False, indent=2), encoding='utf-8')
+          print('515er-Test:', len(results), 'von', len(symbols), 'Aktien erfolgreich')
+          if errors or len(results) != len(symbols):
+              raise SystemExit('515er-Test unvollstaendig. Fehler stehen im Artefakt; bestehende Website unveraendert.')
+          PY
+      - name: Pruefbericht speichern
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: opportunity100-515-report
+          path: opportunity100_515_report.json
+          if-no-files-found: warn
+          retention-days: 30
