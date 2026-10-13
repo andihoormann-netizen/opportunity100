@@ -1,0 +1,45 @@
+
+name: Opportunity 100 - Datentest
+
+on:
+  workflow_dispatch:
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - name: EODHD-Verbindung pruefen
+        env:
+          EODHD_API_KEY: ${{ secrets.EODHD_API_KEY }}
+        run: |
+          python3 - <<'PY'
+          import os
+          import json
+          import urllib.request
+
+          token = os.environ.get("EODHD_API_KEY", "")
+          if not token:
+              raise SystemExit("FEHLER: EODHD_API_KEY fehlt")
+
+          url = (
+              "https://eodhd.com/api/eod/AAPL.US"
+              "?fmt=json&order=d&limit=1"
+          )
+          request = urllib.request.Request(
+              url,
+              headers={"Authorization": "Bearer " + token}
+          )
+          try:
+              with urllib.request.urlopen(request, timeout=30) as r:
+                  data = json.load(r)
+              if isinstance(data, list) and data and "close" in data[0]:
+                  print("ERFOLG: Kursdaten empfangen")
+                  print("Letzter Datenstichtag:", data[0].get("date"))
+              else:
+                  print("Keine verwertbaren Kursdaten erhalten")
+                  raise SystemExit(1)
+          except Exception:
+              raise SystemExit(
+                  "Abruf fehlgeschlagen. API-Zugang oder Tarif pruefen."
+              )
+          PY
